@@ -174,6 +174,8 @@ class analyze:
             time.sleep(3)
 
         self.graph_visual()
+
+    # The graphical visual implementation for Buttons and Textfield
     def graph_visual(self):
         # Input textbox
         self.filename_textbox = "{}".format(self.filename)
@@ -296,7 +298,7 @@ class analyze:
         plt.xticks(rotation='vertical')
         plt.subplots_adjust(bottom=.3)
         plt.show()
-
+    # The main program function that retrieve data and interpret data as background task
     def program_loop(self):
         self.t_null = time.time()
         while (not self.close_program_flag):
@@ -311,7 +313,7 @@ class analyze:
             self.t_diff = round(self.t_end - t_new, 2)
             t_start = round(self.t_end - self.t_null, 2)
             print("{}/{}. t_start: {} t_diff: {} time_frame: {}s".format(self.points, self.count, t_start, self.t_diff, self.time_frame_min*60))
-
+    # This block stores new data to timestamps, xs, ys, and update some of the information variables
     def new_data(self):
         self.update_input_graph_flag = 0
         if self.points == self.count:
@@ -341,7 +343,7 @@ class analyze:
         self.start_val = (self.timestamps[0], round(self.ys[0], 2))
         self.end_val = (self.timestamps[-1], round(self.ys[-1], 2))
         self.update_input_graph_flag = 1
-
+    # Retrieve raw data that is specific to gdax and coinbase
     def __bitcoin_order_book__(self):
         try:
             product_id = "BTC-USD"
@@ -363,7 +365,166 @@ class analyze:
         except requests.ConnectTimeout:
             print("Error: Connection Timeout")
             return -1
+    # Handler for sample interval textbox
 
+    # Function runs at different thread to update the graph
+    def check_graph(self, i):
+        if len(self.timestamps) < 2:
+            return 0
+        self.update_input_graph()
+        self.update_output_graph()
+    # Updates the input graph at each call
+    def update_input_graph(self):
+        if self.update_input_graph_flag:
+            self.input_graph.clear()
+            try:
+                self.input_graph.set_ylim(min(self.ys) - 12, max(self.ys) + 12)
+                self.input_graph.set_xlim(self.timestamps[0], self.timestamps[-1])
+            except ValueError:
+                print("Value error: update input graph")
+                exit(1)
+            self.input_graph.plot(self.timestamps, self.ys, '-', c='gray', label='original', linewidth=1.0)
+            self.input_graph.plot(self.timestamps, self.ys, 'o', c='black', label='input', linewidth=1.0)
+
+            self.input_graph.annotate("{}".format(int(self.ys[-1])), xy=[self.timestamps[-1], self.ys[-1]+1])
+            hfmt = dates.DateFormatter('%H:%M:%S')
+            self.input_graph.xaxis.set_major_formatter(hfmt)
+
+            self.input_graph.text(x=self.timestamps[0], y=max(self.ys)+15, text="Start: {}".format(self.start_val[1]), s="", color='black')
+            self.input_graph.text(x=self.timestamps[-1], y=max(self.ys)+15, text="End: {}".format(self.end_val[1]), s="", color='black')
+
+            self.input_graph.set_title("Input Data")
+            self.input_graph.set_ylabel("Value")
+            plt.xticks(rotation='vertical')
+            plt.subplots_adjust(bottom=.3)
+            if self.press_loc:
+                x_coor = self.press_loc[0]
+                y_coor = self.press_loc[1]
+                self.input_graph.annotate("{}".format(round(y_coor, 3)), xy=[x_coor, max(self.ys)+6], color='firebrick')
+                self.input_graph.plot(self.press_loc[0], self.press_loc[1], 'o', c='firebrick', label='press', linewidth=1.0)
+            if self.release_loc:
+                x_coor = self.release_loc[0]
+                y_coor = self.release_loc[1]
+                self.input_graph.annotate("{}".format(round(y_coor, 3)), xy=[x_coor, max(self.ys)+9], color='darkred')
+                self.input_graph.plot(self.release_loc[0], self.release_loc[1], 'o', c='darkred', label='release', linewidth=1.0)
+            if self.mark1_coor:
+                x_coor = self.mark1_coor[0]
+                y_coor = self.mark1_coor[1]
+                x_coor_str = self.print_raw_format(x_coor)
+                self.input_graph.annotate("{}, {}".format(x_coor_str, round(y_coor, 3)), xy=[x_coor, min(self.ys)-3], color='darkblue')
+                self.input_graph.plot(self.mark1_coor[0], self.mark1_coor[1], 'o', c='darkblue', label='mark1', linewidth=1.0)
+            if self.mark2_coor:
+                x_coor = self.mark2_coor[0]
+                y_coor = self.mark2_coor[1]
+                x_coor_str = self.print_raw_format(x_coor)
+                self.input_graph.annotate("{}, {}".format(x_coor_str, round(y_coor, 3)), xy=[x_coor, min(self.ys)-6], color='darkgreen')
+                self.input_graph.plot(self.mark2_coor[0], self.mark2_coor[1], 'o', c='darkgreen', label='mark2', linewidth=1.0)
+            if self.alarm_coor:
+                x_coor = self.alarm_coor[0]
+                y_coor = self.alarm_coor[1]
+                button_release_line = mlines.Line2D([x_coor, x_coor], [y_coor - self.alarm_threshold, y_coor + self.alarm_threshold], color='darkgoldenrod')
+                self.input_graph.add_line(button_release_line)
+                x_coor_str = self.print_raw_format(x_coor)
+                self.input_graph.annotate("{}, {}".format(x_coor_str, round(y_coor, 3)), xy=[x_coor, min(self.ys)-9], color='darkgoldenrod')
+                self.input_graph.plot(self.alarm_coor[0], self.alarm_coor[1], 'o', c='darkgoldenrod', label='alarm', linewidth=1.0)
+
+            if self.input_graph_overlay_position:
+                x_coor = self.input_graph_overlay_position[0]
+                x_coor_str = self.print_raw_format(x_coor)
+                y_coor = self.input_graph_overlay_position[1]
+                self.input_graph.annotate("x={}, y={}".format(x_coor_str, y_coor), xy=[x_coor, y_coor+3])
+                self.input_graph.plot(x_coor, y_coor, 'x', c='red', linewidth=1.0)
+
+        self.update_input_graph_flag = 0
+    # Function that update output graph at each call
+    def update_output_graph(self):
+        if self.update_output_graph_flag:
+            self.output_graph.clear()
+            self.output_graph.set_ylim(min(self.input_ys) - 3, max(self.input_ys) + 3)
+            self.output_graph.set_xlim(self.input_times[0], self.input_times[-1])
+            self.output_graph.plot(self.input_times, self.interpolated_ys, c="gray", label="Interpolated", linewidth=1.0)
+            self.output_graph.plot(self.input_times, self.linear_ys, c="orange", label="Linear-fit", linewidth=1.0)
+            if self.linear_slope:
+                x_position = self.input_times[int(len(self.input_times)/2)]
+                y_position = self.linear_ys[int(len(self.linear_ys) / 2)]
+                self.output_graph.annotate("{}".format(round(self.linear_slope, 4)), xy=[x_position, y_position])
+            self.output_graph.plot(self.input_times, self.poly_ys, c='blue', label='Poly-fit', linewidth=1.0)
+            self.output_graph.set_title("Output Data")
+            self.output_graph.set_xlabel("Time (Sec)")
+            self.output_graph.set_ylabel("Value")
+
+            hfmt = dates.DateFormatter('%H:%M:%S')
+            self.output_graph.xaxis.set_major_formatter(hfmt)
+            #self.output_graph.xaxis.set_major_locator(dates.SecondLocator())
+            #self.output_graph.legend()
+
+            # Plot Avg value
+            avg_value = np.sum(self.interpolated_ys) / len(self.interpolated_xs)
+            avg_value = round(avg_value, 2)
+            avg_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [avg_value, avg_value])
+            avg_line.set_color("darkred")
+            self.output_graph.add_line(avg_line)
+            self.output_graph.annotate("{}".format(avg_value), xy=[self.input_times[0], avg_value])
+
+            # Plot Max value
+            max_value = max(self.interpolated_ys)
+            max_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [max_value, max_value])
+            max_line.set_color("black")
+            self.output_graph.add_line(max_line)
+            max_value = max(self.interpolated_ys)
+            max_index = list(self.interpolated_ys).index(max_value)
+            self.output_graph.annotate("{}".format(max_value), xy=[self.input_times[max_index], self.interpolated_ys[max_index]])
+
+            # Plot Min value
+            min_value = min(self.interpolated_ys)
+            min_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [min_value, min_value])
+            min_line.set_color("black")
+            self.output_graph.add_line(min_line)
+            min_value = min(self.interpolated_ys)
+            min_index = list(self.interpolated_ys).index(min_value)
+            self.output_graph.annotate("{}".format(min_value), xy=[self.input_times[min_index], self.interpolated_ys[min_index]])
+
+            # Ploy-Max value
+            max_value = round(max(self.poly_ys), 2)
+            max_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [max_value, max_value])
+            max_line.set_color("darkgreen")
+            self.output_graph.add_line(max_line)
+            max_value = max(self.poly_ys)
+            max_index = list(self.poly_ys).index(max_value)
+            self.output_graph.annotate("{}".format(round(max_value,2)), xy=[self.input_times[max_index], self.poly_ys[max_index]])
+
+            # Ploy-Min value
+            min_value = round(min(self.poly_ys), 2)
+            min_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [min_value, min_value])
+            min_line.set_color("darkgreen")
+            self.output_graph.add_line(min_line)
+            min_value = min(self.poly_ys)
+            min_index = list(self.poly_ys).index(min_value)
+            self.output_graph.annotate("{}".format(round(min_value, 2)), xy=[self.input_times[min_index], self.poly_ys[min_index]])
+
+            self.update_output_graph_flag = 0
+    # Handler for updating input graph overlay position
+    def input_graph_overlay_position_func(self, event):
+        if event.x > 860:
+            return 0
+        elif event.x < 130:
+            return 0
+        elif event.y > 560:
+            return 0
+        elif event.y < 400:
+            return 0
+        self.input_graph_overlay_position = 0
+        raw_x_data = event.xdata
+        raw_y_data = event.ydata
+        try:
+            index = np.searchsorted(self.timestamps, [raw_x_data])[0]
+            input_x_data = self.timestamps[index]
+        except IndexError:
+            return 0
+        input_y_data = self.ys[index]
+        self.input_graph_overlay_position = (input_x_data, input_y_data)
+        self.update_input_graph_flag = 1
+    # Handler for sample interval
     def sample_interval_submit(self, text):
         initial = self.sample_time_interval
         try:
@@ -373,6 +534,7 @@ class analyze:
             self.sample_time_interval = initial
             return 0
         self.__set_count__()
+    # Handler for time frame textbox.
     def time_frame_submit(self, text):
         initial = self.time_frame_min
         try:
@@ -382,6 +544,7 @@ class analyze:
             self.time_frame_min = initial
             return 0
         self.__set_count__()
+    # Based on a derived formula, this function determines count variable for input time frame and sample time interval
     def __set_count__(self):
         #self.sample_time_interval = 2
         if self.time_frame_min < 1:
@@ -403,7 +566,7 @@ class analyze:
         if self.count < 2:
             print("Count need to be alteast 2")
             exit(1)
-
+    # Handler for Mark 1 component upon click
     def on_mark1(self, event):
         pass
     def on_mark1_clicked(self, event):
@@ -416,6 +579,7 @@ class analyze:
             self.press_loc = 0
             self.press_index = 0
         self.update_input_graph_flag = 1
+    # Handler for Mark 2 component upon click
     def on_mark2(self, event):
         pass
     def on_mark2_clicked(self, event):
@@ -428,6 +592,7 @@ class analyze:
             self.press_loc = 0
             self.press_index = 0
         self.update_input_graph_flag = 1
+    # Handler for Clearing all the markers
     def on_clear_marker(self, event):
         pass
     def on_clear_marker_clicked(self, event):
@@ -442,6 +607,7 @@ class analyze:
         self.alarm_coor = 0
         self.alarm_index = 0
         self.update_input_graph_flag = 1
+    # Fix the marker coordinate position when shrinking or extending the data size
     def fix_marker_coor(self):
         if self.mark1_coor:
             y_val = self.mark1_coor[1]
@@ -462,7 +628,7 @@ class analyze:
             self.alarm_index = index
             self.alarm_coor = (x_val, y_val)
         self.update_input_graph_flag = 1
-
+    # Separate thread that runs in the background that check for alarm value once set
     def check_alarm(self):
         print("Alarm will sound when {} above or below {}".format(self.alarm_threshold, self.alarm_coor[1]))
         max_value = self.alarm_coor[1] + self.alarm_threshold
@@ -478,6 +644,7 @@ class analyze:
             time.sleep((self.sample_time_interval)/2)
         self.alarm_task = 0
         print("Alarm deactivated")
+    # Handler for threshold textbox that determines at what range the alarm should sound
     def alarm_threshold_submit(self, text):
         initial = self.alarm_threshold
         try:
@@ -488,6 +655,7 @@ class analyze:
             return 0
     def on_alarm(self, event):
         pass
+    # Handler for alarm button, thus fires off alarm thread in the background to check for alarm set value
     def on_alarm_clicked(self, event):
         if self.alarm_coor:
             print("Deactivating alarm set at {} for {}".format(self.alarm_coor[0], self.alarm_coor[1]))
@@ -503,7 +671,7 @@ class analyze:
             self.alarm_task.daemon = True
             self.alarm_task.start()
         self.update_input_graph_flag = 1
-
+    # Handler for calculating average value
     def on_average(self, event):
         if len(self.timestamps) < 2:
             self.hold_program_counter = 0
@@ -529,6 +697,7 @@ class analyze:
         self.press_index = 0
         self.release_index = 0
         self.hold_program_counter = 0
+    # Handler for calculating max value and rewrite input data
     def on_max(self, event):
         pass
     def on_max_clicked(self, event):
@@ -553,6 +722,7 @@ class analyze:
         self.press_index = 0
         self.release_index = 0
         self.hold_program_counter = 0
+    # Handler for calculating min value and rewrite input data
     def on_min(self, event):
         pass
     def on_min_clicked(self, event):
@@ -577,6 +747,7 @@ class analyze:
         self.press_index = 0
         self.release_index = 0
         self.hold_program_counter = 0
+    # Handler for calculating linear function and updating input data
     def on_linearize(self, event):
         pass
     def on_linearize_clicked(self, event):
@@ -604,6 +775,7 @@ class analyze:
         self.press_index = 0
         self.release_index = 0
         self.hold_program_counter = 0
+    # Handler for calculating polynomial function and updating input data
     def on_smooth(self, event):
         if len(self.timestamps) < 2:
             self.hold_program_counter = 0
@@ -648,6 +820,7 @@ class analyze:
         self.press_index = 0
         self.release_index = 0
         self.hold_program_counter = 0
+    # Handler for calculating and reconstructing input data for data loss
     def on_reconstruct(self, event):
         pass
     def on_reconstruct_clicked(self, event):
@@ -718,9 +891,10 @@ class analyze:
         self.release_index = 0
         self.hold_program_counter = 0
         self.update_input_graph_flag = 1
-
+    # Handler for updating filename information
     def file_submit(self, text):
         self.filename_textbox = "{}.csv".format(text)
+    # Handler for load button once clicked to load specified csv file
     def on_load(self, event):
         pass
     def on_load_clicked(self, event):
@@ -751,6 +925,7 @@ class analyze:
         else:
             print("Missing input file: {}".format(input_filename))
         self.hold_program_counter = 0
+    # Handler for save button once clicked to store data into specified csv file
     def on_save(self, event):
         pass
     def on_save_clicked(self, event):
@@ -770,7 +945,7 @@ class analyze:
                     writer.writerow(new_dict)
         except PermissionError:
             print("ERROR: Write file caused an error. Please close the file.")
-
+    # Handler to clear data input data
     def on_clear(self, event):
         pass
     def on_clear_clicked(self, event):
@@ -782,10 +957,12 @@ class analyze:
         self.index = self.points - 1
         self.on_delete_clicked(event)
         self.update_input_graph_flag = 1
+    # Handler to close the program
     def on_close(self, event):
         pass
     def on_close_clicked(self, event):
         self.close_program_flag = 1
+    # Handler to pause the pause
     def on_hold(self, event):
         pass
     def on_hold_clicked(self, event):
@@ -793,7 +970,7 @@ class analyze:
             self.hold_program_counter = 0
         else:
             self.hold_program_counter = 1
-
+    # Handler to process the input data in real-time as the input data updates
     def on_rt(self, event):
         pass
     def on_rt_clicked(self, event):
@@ -802,6 +979,7 @@ class analyze:
         self.release_loc = 0
         self.release_index = 0
         self.real_time_flag = 1
+    # This function gets called at each cycle when real time flag set
     def real_time_data_func(self):
         if len(self.xs) < 2:
             return 0
@@ -826,170 +1004,7 @@ class analyze:
         self.__generate_polynomial_equation__()
         self.__run_polynomial_equation__()
         self.update_output_graph_flag = 1
-
-    def check_graph(self, i):
-        if len(self.timestamps) < 2:
-            return 0
-        self.update_input_graph()
-        self.update_output_graph()
-    def update_input_graph(self):
-        if self.update_input_graph_flag:
-            self.input_graph.clear()
-            try:
-                self.input_graph.set_ylim(min(self.ys) - 12, max(self.ys) + 12)
-                self.input_graph.set_xlim(self.timestamps[0], self.timestamps[-1])
-            except ValueError:
-                print("Value error: update input graph")
-                exit(1)
-            self.input_graph.plot(self.timestamps, self.ys, '-', c='gray', label='original', linewidth=1.0)
-            self.input_graph.plot(self.timestamps, self.ys, 'o', c='black', label='input', linewidth=1.0)
-
-            self.input_graph.annotate("{}".format(int(self.ys[-1])), xy=[self.timestamps[-1], self.ys[-1]+1])
-            hfmt = dates.DateFormatter('%H:%M:%S')
-            self.input_graph.xaxis.set_major_formatter(hfmt)
-
-            self.input_graph.text(x=self.timestamps[0], y=max(self.ys)+15, text="Start: {}".format(self.start_val[1]), s="", color='black')
-            self.input_graph.text(x=self.timestamps[-1], y=max(self.ys)+15, text="End: {}".format(self.end_val[1]), s="", color='black')
-
-            self.input_graph.set_title("Input Data")
-            self.input_graph.set_ylabel("Value")
-            plt.xticks(rotation='vertical')
-            plt.subplots_adjust(bottom=.3)
-            if self.press_loc:
-                x_coor = self.press_loc[0]
-                y_coor = self.press_loc[1]
-                #button_release_line = mlines.Line2D([x_coor, x_coor], [y_coor - 500, y_coor + 500])
-                #button_release_line.set_color("red")
-                #self.input_graph.add_line(button_release_line)
-                x_coor_str = self.conv2Time(x_coor)
-                self.input_graph.annotate("{}".format(round(y_coor, 3)), xy=[x_coor, max(self.ys)+6], color='firebrick')
-                self.input_graph.plot(self.press_loc[0], self.press_loc[1], 'o', c='firebrick', label='press', linewidth=1.0)
-            if self.release_loc:
-                x_coor = self.release_loc[0]
-                y_coor = self.release_loc[1]
-                #button_release_line = mlines.Line2D([x_coor, x_coor], [y_coor - 500, y_coor + 500])
-                #button_release_line.set_color("red")
-                #self.input_graph.add_line(button_release_line)
-                x_coor_str = self.conv2Time(x_coor)
-                self.input_graph.annotate("{}".format(round(y_coor, 3)), xy=[x_coor, max(self.ys)+9], color='darkred')
-                self.input_graph.plot(self.release_loc[0], self.release_loc[1], 'o', c='darkred', label='release', linewidth=1.0)
-            if self.mark1_coor:
-                x_coor = self.mark1_coor[0]
-                y_coor = self.mark1_coor[1]
-                x_coor_str = self.conv2Time(x_coor)
-                self.input_graph.annotate("{}, {}".format(x_coor_str, round(y_coor, 3)), xy=[x_coor, min(self.ys)-3], color='darkblue')
-                self.input_graph.plot(self.mark1_coor[0], self.mark1_coor[1], 'o', c='darkblue', label='mark1', linewidth=1.0)
-            if self.mark2_coor:
-                x_coor = self.mark2_coor[0]
-                y_coor = self.mark2_coor[1]
-                x_coor_str = self.conv2Time(x_coor)
-                self.input_graph.annotate("{}, {}".format(x_coor_str, round(y_coor, 3)), xy=[x_coor, min(self.ys)-6], color='darkgreen')
-                self.input_graph.plot(self.mark2_coor[0], self.mark2_coor[1], 'o', c='darkgreen', label='mark2', linewidth=1.0)
-            if self.alarm_coor:
-                x_coor = self.alarm_coor[0]
-                y_coor = self.alarm_coor[1]
-                button_release_line = mlines.Line2D([x_coor, x_coor], [y_coor - self.alarm_threshold, y_coor + self.alarm_threshold], color='darkgoldenrod')
-                self.input_graph.add_line(button_release_line)
-                x_coor_str = self.conv2Time(x_coor)
-                self.input_graph.annotate("{}, {}".format(x_coor_str, round(y_coor, 3)), xy=[x_coor, min(self.ys)-9], color='darkgoldenrod')
-                self.input_graph.plot(self.alarm_coor[0], self.alarm_coor[1], 'o', c='darkgoldenrod', label='alarm', linewidth=1.0)
-
-            if self.input_graph_overlay_position:
-                x_point = self.input_graph_overlay_position[0]
-                x_point_str = self.conv2Time(x_point)
-                y_point = self.input_graph_overlay_position[1]
-                self.input_graph.annotate("x={}, y={}".format(x_point_str, y_point), xy=[x_point, y_point+3])
-                self.input_graph.plot(x_point, y_point, 'x', c='red', linewidth=1.0)
-
-        self.update_input_graph_flag = 0
-
-    def update_output_graph(self):
-        if self.update_output_graph_flag:
-            self.output_graph.clear()
-            self.output_graph.set_ylim(min(self.input_ys) - 3, max(self.input_ys) + 3)
-            self.output_graph.set_xlim(self.input_times[0], self.input_times[-1])
-            self.output_graph.plot(self.input_times, self.interpolated_ys, c="gray", label="Interpolated", linewidth=1.0)
-            self.output_graph.plot(self.input_times, self.linear_ys, c="orange", label="Linear-fit", linewidth=1.0)
-            if self.linear_slope:
-                x_position = self.input_times[int(len(self.input_times)/2)]
-                y_position = self.linear_ys[int(len(self.linear_ys) / 2)]
-                self.output_graph.annotate("{}".format(round(self.linear_slope, 4)), xy=[x_position, y_position])
-            self.output_graph.plot(self.input_times, self.poly_ys, c='blue', label='Poly-fit', linewidth=1.0)
-            self.output_graph.set_title("Output Data")
-            self.output_graph.set_xlabel("Time (Sec)")
-            self.output_graph.set_ylabel("Value")
-
-            hfmt = dates.DateFormatter('%H:%M:%S')
-            self.output_graph.xaxis.set_major_formatter(hfmt)
-            #self.output_graph.xaxis.set_major_locator(dates.SecondLocator())
-            #self.output_graph.legend()
-
-            # Plot Avg value
-            avg_value = np.sum(self.interpolated_ys) / len(self.interpolated_xs)
-            avg_value = round(avg_value, 2)
-            avg_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [avg_value, avg_value])
-            avg_line.set_color("red")
-            self.output_graph.add_line(avg_line)
-            self.output_graph.annotate("{}".format(avg_value), xy=[self.input_times[0], avg_value])
-
-            # Plot Max value
-            max_value = max(self.interpolated_ys)
-            max_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [max_value, max_value])
-            max_line.set_color("black")
-            self.output_graph.add_line(max_line)
-            max_value = max(self.interpolated_ys)
-            max_index = list(self.interpolated_ys).index(max_value)
-            self.output_graph.annotate("{}".format(max_value), xy=[self.input_times[max_index], self.interpolated_ys[max_index]])
-
-            # Plot Min value
-            min_value = min(self.interpolated_ys)
-            min_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [min_value, min_value])
-            min_line.set_color("black")
-            self.output_graph.add_line(min_line)
-            min_value = min(self.interpolated_ys)
-            min_index = list(self.interpolated_ys).index(min_value)
-            self.output_graph.annotate("{}".format(min_value), xy=[self.input_times[min_index], self.interpolated_ys[min_index]])
-
-            # Ploy-Max value
-            max_value = round(max(self.poly_ys), 2)
-            max_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [max_value, max_value])
-            max_line.set_color("green")
-            self.output_graph.add_line(max_line)
-            max_value = max(self.poly_ys)
-            max_index = list(self.poly_ys).index(max_value)
-            self.output_graph.annotate("{}".format(round(max_value,2)), xy=[self.input_times[max_index], self.poly_ys[max_index]])
-
-            # Ploy-Min value
-            min_value = round(min(self.poly_ys), 2)
-            min_line = mlines.Line2D([self.input_times[0], self.input_times[-1]], [min_value, min_value])
-            min_line.set_color("green")
-            self.output_graph.add_line(min_line)
-            min_value = min(self.poly_ys)
-            min_index = list(self.poly_ys).index(min_value)
-            self.output_graph.annotate("{}".format(round(min_value, 2)), xy=[self.input_times[min_index], self.poly_ys[min_index]])
-
-            self.update_output_graph_flag = 0
-    def input_graph_overlay_position_func(self, event):
-        if event.x > 860:
-            return 0
-        elif event.x < 130:
-            return 0
-        elif event.y > 560:
-            return 0
-        elif event.y < 400:
-            return 0
-        self.input_graph_overlay_position = 0
-        raw_x_data = event.xdata
-        raw_y_data = event.ydata
-        try:
-            index = np.searchsorted(self.timestamps, [raw_x_data])[0]
-            input_x_data = self.timestamps[index]
-        except IndexError:
-            return 0
-        input_y_data = self.ys[index]
-        self.input_graph_overlay_position = (input_x_data, input_y_data)
-        self.update_input_graph_flag = 1
-
+    # Handler for deleting data for selected region
     def on_delete(self, event):
         if len(self.timestamps) < 2:
             self.hold_program_counter = 0
@@ -1019,6 +1034,7 @@ class analyze:
         self.release_index = 0
         self.hold_program_counter = 0
         self.update_input_graph_flag = 1
+    # Handler to select all data for selected region
     def on_select_all(self, event):
         pass
     def on_select_all_clicked(self, event):
@@ -1056,7 +1072,7 @@ class analyze:
         self.__run_polynomial_equation__()
         self.update_input_graph_flag = 1
         self.update_output_graph_flag = 1
-
+    # Handler to process the mouse click press button on input graph
     def button_press(self, event):
         self.hold_program_counter = 1
         self.real_time_flag = 0
@@ -1092,6 +1108,7 @@ class analyze:
         self.press_loc = (input_x_data, input_y_data)
         self.press_index = index
         return self.press_loc
+    # Handler to process the mouse click release button on input graph
     def button_release(self, event):
         if self.press_loc:
             self.button_release_internel(event)
@@ -1165,9 +1182,11 @@ class analyze:
         self.update_input_graph_flag = 1
         return self.release_loc
 
+    # Generate interpolated function and output interpolated data
     def __run_interpolation__(self):
         self.interpolated_f = interp1d(self.input_xs, self.input_ys, kind='linear')
         self.interpolated_ys = self.interpolated_f(self.interpolated_xs)
+    # Round array list to a decimal number
     def __round_array_list__(self, arr_list, percesion=0):
         number = 3
         if percesion:
@@ -1186,12 +1205,15 @@ class analyze:
             print("list is not ndarray nor list type")
             return 1
         return 1
+    # Generate linear equation for input data
     def __generate_linear_equation__(self):
         self.linear_slope, self.linear_intercept, self.r_value, self.p_value, self.std_err = \
             stats.linregress(np.asarray(self.input_xs), np.asarray(self.input_ys))
+    # Run linear equation on linear_xs and output data to linear_ys
     def __run_linear_equation__(self):
         self.linear_ys = (self.linear_slope * np.asarray(self.linear_xs)) + self.linear_intercept
         self.linear_ys = self.__round_array_list__(self.linear_ys, 3)
+    # Generate polynomial equation from input xs and ys
     def __generate_polynomial_equation__(self, order=0):
         if order:
             self.order = order
@@ -1212,19 +1234,11 @@ class analyze:
                 self.order = 9
         self.poly_zs = np.polyfit(np.asarray(self.input_xs), np.asarray(self.input_ys), self.order)
         self.poly_f = np.poly1d(self.poly_zs)
+    # Run polynomial equation on poly xs and output to poly ys
     def __run_polynomial_equation__(self):
         self.poly_ys = self.poly_f(self.poly_xs)
 
-    def conv2Time(self, sec, format=0):
-        hfmt = "%H:%M:%S"
-        if format:
-            hfmt = format
-        date = dates.num2date(sec)
-        time_str = date.strftime(hfmt)
-        return time_str
-    def conv2Second(self, time_str):
-        hr, min, sec = time_str.split(':')
-        return int(hr) * 3600 + int(min) * 60 + int(sec)
+    # Time axes formatting and conversion
     def seconds_to_raw(self, seconds):
         datetime_seconds_raw = self.datetime_start + datetime.timedelta(seconds=seconds)
         datetime_seconds_raw = dates.date2num(datetime_seconds_raw)
@@ -1238,12 +1252,10 @@ class analyze:
         datetime_diff = dates.num2date(datetime_diff_raw)
         hfmt = "%H:%M:%S"
         time_str = datetime_diff.strftime(hfmt)
-        #print(time_str)
         return time_str
     def print_datetime_format(self, date_time):
         hfmt = "%H:%M:%S"
         time_str = date_time.strftime(hfmt)
-        #print(time_str)
         return time_str
     def time_to_second(self, time_str):
         time_arr = time_str.split(':')
